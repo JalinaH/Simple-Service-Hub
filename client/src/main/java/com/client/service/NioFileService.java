@@ -27,6 +27,31 @@ public class NioFileService {
         socketChannel = SocketChannel.open();
         socketChannel.connect(new InetSocketAddress(SERVER_HOST, SERVER_PORT));
         socketChannel.configureBlocking(true); // Use blocking mode for simplicity
+        
+        // Read and discard the welcome message (ends with "> ")
+        ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        StringBuilder welcome = new StringBuilder();
+        boolean promptReceived = false;
+        
+        while (!promptReceived) {
+            readBuffer.clear();
+            int bytesRead = socketChannel.read(readBuffer);
+            
+            if (bytesRead > 0) {
+                readBuffer.flip();
+                while (readBuffer.hasRemaining()) {
+                    char c = (char) readBuffer.get();
+                    welcome.append(c);
+                    
+                    // Check for prompt
+                    if (welcome.length() >= 2 && 
+                        welcome.substring(welcome.length() - 2).equals("> ")) {
+                        promptReceived = true;
+                        break;
+                    }
+                }
+            }
+        }
     }
     
     /**
@@ -43,24 +68,42 @@ public class NioFileService {
         ByteBuffer buffer = ByteBuffer.wrap("LIST\n".getBytes(StandardCharsets.UTF_8));
         socketChannel.write(buffer);
         
-        // Read response
+        // Read response until we get the prompt ">"
         StringBuilder response = new StringBuilder();
         ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
         
-        while (socketChannel.read(readBuffer) > 0) {
-            readBuffer.flip();
-            while (readBuffer.hasRemaining()) {
-                response.append((char) readBuffer.get());
-            }
+        boolean promptReceived = false;
+        while (!promptReceived) {
             readBuffer.clear();
+            int bytesRead = socketChannel.read(readBuffer);
             
-            // Check if we've received the complete list (ends with newline)
-            if (response.toString().endsWith("\n")) {
-                break;
+            if (bytesRead == -1) {
+                throw new IOException("Server closed connection");
+            }
+            
+            if (bytesRead > 0) {
+                readBuffer.flip();
+                while (readBuffer.hasRemaining()) {
+                    char c = (char) readBuffer.get();
+                    response.append(c);
+                    
+                    // Check if we've received the prompt at the end
+                    if (response.length() >= 2 && 
+                        response.substring(response.length() - 2).equals("> ")) {
+                        promptReceived = true;
+                        break;
+                    }
+                }
             }
         }
         
-        return response.toString();
+        // Remove the prompt from the response
+        String result = response.toString();
+        if (result.endsWith("> ")) {
+            result = result.substring(0, result.length() - 2);
+        }
+        
+        return result.trim();
     }
     
     /**
@@ -80,67 +123,85 @@ public class NioFileService {
         ByteBuffer buffer = ByteBuffer.wrap(command.getBytes(StandardCharsets.UTF_8));
         socketChannel.write(buffer);
         
-        // Read response header
+        // Read the entire response into a StringBuilder
+        StringBuilder response = new StringBuilder();
         ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
-        socketChannel.read(readBuffer);
-        readBuffer.flip();
         
-        // Convert to string to find header end
-        byte[] headerBytes = new byte[readBuffer.remaining()];
-        readBuffer.get(headerBytes);
-        String response = new String(headerBytes, StandardCharsets.UTF_8);
-        
-        if (response.startsWith("ERROR")) {
-            throw new IOException(response.trim());
+        // Read until we get "---END FILE---" or an error
+        boolean endMarkerFound = false;
+        while (!endMarkerFound) {
+            readBuffer.clear();
+            int bytesRead = socketChannel.read(readBuffer);
+            
+            if (bytesRead == -1) {
+                throw new IOException("Server closed connection");
+            }
+            
+            if (bytesRead > 0) {
+                readBuffer.flip();
+                byte[] data = new byte[readBuffer.remaining()];
+                readBuffer.get(data);
+                response.append(new String(data, StandardCharsets.ISO_8859_1));
+                
+                // Check if we have the end marker
+                if (response.toString().contains("---END FILE---")) {
+                    endMarkerFound = true;
+                }
+                
+                // Check for error
+                if (response.toString().startsWith("ERROR")) {
+                    // Read until prompt
+                    if (response.toString().contains("> ")) {
+                        String errorMsg = response.toString();
+                        int promptIdx = errorMsg.indexOf("> ");
+                        errorMsg = errorMsg.substring(0, promptIdx).trim();
+                        throw new IOException(errorMsg);
+                    }
+                }
+            }
         }
         
-        // Find the end of the header line (first newline)
-        int headerEnd = response.indexOf('\n');
-        if (headerEnd == -1) {
-            throw new IOException("Invalid response from server - no header delimiter");
+        String fullResponse = response.toString();
+        
+        // Parse the response format:
+        // FILE: welcome.txt
+        // SIZE: 54 bytes
+        // ---BEGIN FILE---
+        // <file content>
+        // ---END FILE---
+        
+        if (!fullResponse.startsWith("FILE:")) {
+            throw new IOException("Invalid response format from server");
         }
         
-        String header = response.substring(0, headerEnd).trim();
+        // Extract file size from SIZE line
+        int sizeStart = fullResponse.indexOf("SIZE: ") + 6;
+        int sizeEnd = fullResponse.indexOf(" bytes", sizeStart);
+        if (sizeStart == -1 || sizeEnd == -1) {
+            throw new IOException("Could not parse file size from response");
+        }
+        long fileSize = Long.parseLong(fullResponse.substring(sizeStart, sizeEnd).trim());
         
-        // Parse file size from header: "OK <size>"
-        String[] parts = header.split("\\s+");
-        if (parts.length < 2 || !parts[0].equals("OK")) {
-            throw new IOException("Invalid response format: " + header);
+        // Extract file content between markers
+        int contentStart = fullResponse.indexOf("---BEGIN FILE---") + 16;
+        int contentEnd = fullResponse.indexOf("\n---END FILE---");
+        
+        if (contentStart == -1 || contentEnd == -1) {
+            throw new IOException("Could not find file content markers");
         }
         
-        long fileSize;
-        try {
-            fileSize = Long.parseLong(parts[1]);
-        } catch (NumberFormatException e) {
-            throw new IOException("Invalid file size in response: " + parts[1]);
+        // Extract file content (skip the newline after BEGIN marker)
+        if (contentStart < fullResponse.length() && fullResponse.charAt(contentStart) == '\n') {
+            contentStart++;
         }
         
-        // Calculate where file data starts (after the header newline)
-        int fileDataStart = headerEnd + 1;
-        byte[] initialFileData = response.substring(fileDataStart).getBytes(StandardCharsets.ISO_8859_1);
+        String fileContent = fullResponse.substring(contentStart, contentEnd);
+        byte[] fileBytes = fileContent.getBytes(StandardCharsets.ISO_8859_1);
         
         // Create output file
         File outputFile = new File(saveDirectory, filename);
         try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-            // Write initial data that was read with header
-            fos.write(initialFileData);
-            long bytesReceived = initialFileData.length;
-            
-            // Read remaining file data
-            readBuffer.clear();
-            while (bytesReceived < fileSize) {
-                int bytesRead = socketChannel.read(readBuffer);
-                if (bytesRead == -1) {
-                    break;
-                }
-                
-                readBuffer.flip();
-                while (readBuffer.hasRemaining() && bytesReceived < fileSize) {
-                    fos.write(readBuffer.get());
-                    bytesReceived++;
-                }
-                readBuffer.clear();
-            }
+            fos.write(fileBytes);
         }
         
         return outputFile.getAbsolutePath();
