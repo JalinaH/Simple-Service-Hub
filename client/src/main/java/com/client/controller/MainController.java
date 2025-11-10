@@ -38,6 +38,10 @@ public class MainController {
     @FXML private Button udpPingBtn;
     @FXML private Button udpStatusBtn;
     @FXML private Button udpInfoBtn;
+    @FXML private Button udpTimeBtn;
+    @FXML private Button udpUptimeBtn;
+    @FXML private TextField udpCommandField;
+    @FXML private Button udpSendBtn;
     @FXML private Label udpStatusLabel;
     
     // NIO File Tab
@@ -136,11 +140,19 @@ public class MainController {
         udpPingBtn.setDisable(true);
         udpStatusBtn.setDisable(true);
         udpInfoBtn.setDisable(true);
+        udpTimeBtn.setDisable(true);
+        udpUptimeBtn.setDisable(true);
+        udpCommandField.setDisable(true);
+        udpSendBtn.setDisable(true);
         
         udpInitBtn.setOnAction(e -> handleUdpInit());
         udpPingBtn.setOnAction(e -> handleUdpCommand("PING"));
         udpStatusBtn.setOnAction(e -> handleUdpCommand("STATUS"));
         udpInfoBtn.setOnAction(e -> handleUdpCommand("INFO"));
+        udpTimeBtn.setOnAction(e -> handleUdpCommand("TIME"));
+        udpUptimeBtn.setOnAction(e -> handleUdpCommand("UPTIME"));
+        udpSendBtn.setOnAction(e -> handleUdpCustomCommand());
+        udpCommandField.setOnAction(e -> handleUdpCustomCommand());
     }
     
     private void handleUdpInit() {
@@ -151,6 +163,10 @@ public class MainController {
             udpPingBtn.setDisable(true);
             udpStatusBtn.setDisable(true);
             udpInfoBtn.setDisable(true);
+            udpTimeBtn.setDisable(true);
+            udpUptimeBtn.setDisable(true);
+            udpCommandField.setDisable(true);
+            udpSendBtn.setDisable(true);
             udpStatusLabel.setText("Status: Closed");
             return;
         }
@@ -161,11 +177,24 @@ public class MainController {
             udpPingBtn.setDisable(false);
             udpStatusBtn.setDisable(false);
             udpInfoBtn.setDisable(false);
+            udpTimeBtn.setDisable(false);
+            udpUptimeBtn.setDisable(false);
+            udpCommandField.setDisable(false);
+            udpSendBtn.setDisable(false);
             udpStatusLabel.setText("Status: Initialized");
             udpResponseArea.appendText("=== UDP Service Initialized ===\n");
+            udpResponseArea.appendText("Type 'HELP' in command field for available commands\n\n");
         } catch (IOException ex) {
             showAlert("Error", "Failed to initialize UDP service: " + ex.getMessage());
             udpStatusLabel.setText("Status: Initialization failed");
+        }
+    }
+    
+    private void handleUdpCustomCommand() {
+        String command = udpCommandField.getText().trim();
+        if (!command.isEmpty() && udpService.isActive()) {
+            handleUdpCommand(command);
+            udpCommandField.clear();
         }
     }
     

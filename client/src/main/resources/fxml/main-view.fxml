@@ -55,8 +55,8 @@
             </VBox>
         </Tab>
         
-        <!-- UDP Health Tab -->
-        <Tab text="UDP Health">
+        <!-- UDP Message Processing Tab -->
+        <Tab text="UDP Messages">
             <VBox spacing="10" style="-fx-background-color: white;">
                 <padding>
                     <Insets top="15" right="15" bottom="15" left="15"/>
@@ -65,12 +65,27 @@
                 <!-- Control Panel -->
                 <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-background-color: #ecf0f1; -fx-padding: 10; -fx-background-radius: 5;">
                     <Button fx:id="udpInitBtn" text="Initialize" style="-fx-background-color: #27ae60; -fx-text-fill: white;"/>
-                    <Separator orientation="VERTICAL"/>
-                    <Button fx:id="udpPingBtn" text="PING" prefWidth="80" style="-fx-background-color: #3498db; -fx-text-fill: white;"/>
-                    <Button fx:id="udpStatusBtn" text="STATUS" prefWidth="80" style="-fx-background-color: #9b59b6; -fx-text-fill: white;"/>
-                    <Button fx:id="udpInfoBtn" text="INFO" prefWidth="80" style="-fx-background-color: #e67e22; -fx-text-fill: white;"/>
                     <Region HBox.hgrow="ALWAYS"/>
                     <Label fx:id="udpStatusLabel" text="Status: Not initialized"/>
+                </HBox>
+                
+                <!-- Quick Commands -->
+                <VBox spacing="5" style="-fx-background-color: #e8f4f8; -fx-padding: 10; -fx-background-radius: 5;">
+                    <Label text="Quick Commands:" style="-fx-font-weight: bold;"/>
+                    <HBox spacing="5">
+                        <Button fx:id="udpPingBtn" text="PING" prefWidth="70" style="-fx-background-color: #3498db; -fx-text-fill: white; -fx-font-size: 10;"/>
+                        <Button fx:id="udpStatusBtn" text="STATUS" prefWidth="70" style="-fx-background-color: #9b59b6; -fx-text-fill: white; -fx-font-size: 10;"/>
+                        <Button fx:id="udpInfoBtn" text="INFO" prefWidth="70" style="-fx-background-color: #e67e22; -fx-text-fill: white; -fx-font-size: 10;"/>
+                        <Button fx:id="udpTimeBtn" text="TIME" prefWidth="70" style="-fx-background-color: #16a085; -fx-text-fill: white; -fx-font-size: 10;"/>
+                        <Button fx:id="udpUptimeBtn" text="UPTIME" prefWidth="70" style="-fx-background-color: #2ecc71; -fx-text-fill: white; -fx-font-size: 10;"/>
+                    </HBox>
+                </VBox>
+                
+                <!-- Custom Command Input -->
+                <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-background-color: #ecf0f1; -fx-padding: 10; -fx-background-radius: 5;">
+                    <Label text="Command:"/>
+                    <TextField fx:id="udpCommandField" promptText="Enter command (e.g., REVERSE hello, MATH 5+3)" HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="udpSendBtn" text="Send" prefWidth="80" style="-fx-background-color: #3498db; -fx-text-fill: white;"/>
                 </HBox>
                 
                 <!-- Response Area -->
@@ -81,7 +96,7 @@
                 </Label>
                 <TextArea fx:id="udpResponseArea" editable="false" wrapText="true" VBox.vgrow="ALWAYS" 
                           style="-fx-control-inner-background: #fafafa; -fx-font-family: 'Courier New';" 
-                          promptText="UDP responses will appear here..."/>
+                          promptText="UDP responses will appear here...&#10;&#10;Available commands:&#10;  PING - Check server&#10;  TIME - Get time&#10;  UPTIME - Server uptime&#10;  ECHO [text] - Echo back&#10;  REVERSE [text] - Reverse text&#10;  UPPERCASE [text] - To uppercase&#10;  LOWERCASE [text] - To lowercase&#10;  COUNT [text] - Count chars/words&#10;  MATH [expression] - Calculate (e.g., 5+3)&#10;  STATUS - Server status&#10;  INFO/HELP - Show help"/>
             </VBox>
         </Tab>
         
@@ -164,7 +179,7 @@
         <padding>
             <Insets top="10" right="10" bottom="10" left="10"/>
         </padding>
-        <Label text="Network Programming Assignment | TCP (5000) | NIO (5001) | UDP (5002)" textFill="white">
+        <Label text="Network Programming Assignment | TCP (5004) | NIO (5001) | UDP (5002)" textFill="white">
             <font>
                 <Font size="11"/>
             </font>

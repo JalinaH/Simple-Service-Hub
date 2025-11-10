@@ -79,6 +79,9 @@ public class ClientHandler implements Runnable {
                     continue;
                 }
                 
+                // Echo the message back to sender as confirmation
+                out.println("[You]: " + inputLine);
+                
                 // Broadcast the message to all other clients via the server
                 // This method uses synchronized blocks for thread safety
                 server.broadcast(clientAddress + ": " + inputLine, this);

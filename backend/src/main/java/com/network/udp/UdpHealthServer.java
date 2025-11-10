@@ -9,12 +9,13 @@ import java.text.SimpleDateFormat;
 import java.util.Date;
 
 /**
- * UDP Health Check Server - Demonstrates connectionless communication
+ * UDP Message Processing Server - Demonstrates connectionless communication
  * 
  * UDP (User Datagram Protocol) is a connectionless, fast protocol ideal for:
- * - Health checks
- * - Status monitoring
- * - Non-critical messages where occasional packet loss is acceptable
+ * - Quick message processing
+ * - Text transformations
+ * - Simple calculations
+ * - Real-time data where occasional packet loss is acceptable
  * 
  * Key Differences from TCP:
  * - No connection establishment (no accept/connect handshake)
@@ -23,7 +24,7 @@ import java.util.Date;
  * - Faster and more lightweight
  * - Each message is independent (stateless)
  * 
- * This server listens on Port 5002 and responds to health check requests.
+ * This server listens on Port 5002 and processes text commands.
  */
 public class UdpHealthServer implements Runnable {
 
@@ -31,6 +32,7 @@ public class UdpHealthServer implements Runnable {
     private DatagramSocket socket;  // UDP socket (no ServerSocket needed!)
     private volatile boolean running;
     private static final int BUFFER_SIZE = 1024;  // Max size for incoming packets
+    private final long startTime;  // Server start time
 
     /**
      * Constructor
@@ -39,6 +41,7 @@ public class UdpHealthServer implements Runnable {
     public UdpHealthServer(int port) {
         this.port = port;
         this.running = true;
+        this.startTime = System.currentTimeMillis();
     }
 
     @Override
@@ -48,11 +51,11 @@ public class UdpHealthServer implements Runnable {
             // Unlike TCP, we don't need ServerSocket - DatagramSocket handles everything
             socket = new DatagramSocket(port);
             
-            System.out.println("[UdpHealthServer] UDP Health Check Server started successfully!");
+            System.out.println("[UdpHealthServer] UDP Message Processing Server started successfully!");
             System.out.println("[UdpHealthServer] Listening on port " + port);
             System.out.println("[UdpHealthServer] Protocol: UDP (User Datagram Protocol)");
-            System.out.println("[UdpHealthServer] Service: Health Check / Status Monitor");
-            System.out.println("[UdpHealthServer] Waiting for health check requests...\n");
+            System.out.println("[UdpHealthServer] Service: Message Processing & Text Transformations");
+            System.out.println("[UdpHealthServer] Waiting for requests...\n");
 
             // 2. Infinite loop to continuously receive and process UDP packets
             // Unlike TCP's accept() which creates new sockets, UDP reuses the same socket
@@ -135,7 +138,7 @@ public class UdpHealthServer implements Runnable {
     }
 
     /**
-     * Process the health check request and generate appropriate response
+     * Process the message request and generate appropriate response
      * 
      * @param request The request message from client
      * @param clientAddress The client's IP address (for logging/tracking)
@@ -146,32 +149,162 @@ public class UdpHealthServer implements Runnable {
                                      @SuppressWarnings("unused") int clientPort) {
         String timestamp = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new Date());
         
-        // Handle different types of health check requests
-        if (request.equalsIgnoreCase("PING") || request.equalsIgnoreCase("HEALTH")) {
-            return "STATUS:OK|TIMESTAMP:" + timestamp + "|SERVER:UDP-Health-5002";
-        } else if (request.equalsIgnoreCase("STATUS")) {
-            // Get system information
-            Runtime runtime = Runtime.getRuntime();
-            long totalMemory = runtime.totalMemory() / (1024 * 1024);  // MB
-            long freeMemory = runtime.freeMemory() / (1024 * 1024);    // MB
-            long usedMemory = totalMemory - freeMemory;
+        // Parse command and argument
+        String command = request.toUpperCase();
+        String argument = "";
+        
+        int spaceIndex = request.indexOf(' ');
+        if (spaceIndex > 0) {
+            command = request.substring(0, spaceIndex).toUpperCase();
+            argument = request.substring(spaceIndex + 1);
+        }
+        
+        // Handle different types of requests
+        switch (command) {
+            case "PING":
+            case "HEALTH":
+                return "✓ PONG - Server is alive! | Time: " + timestamp;
+                
+            case "TIME":
+                return "⏰ Server Time: " + timestamp;
+                
+            case "UPTIME":
+                long uptimeMs = System.currentTimeMillis() - startTime;
+                long seconds = (uptimeMs / 1000) % 60;
+                long minutes = (uptimeMs / (1000 * 60)) % 60;
+                long hours = (uptimeMs / (1000 * 60 * 60)) % 24;
+                return String.format("⏱ Server Uptime: %02d:%02d:%02d", hours, minutes, seconds);
+                
+            case "ECHO":
+                return "📢 Echo: " + argument;
+                
+            case "REVERSE":
+                if (argument.isEmpty()) {
+                    return "❌ Error: REVERSE requires text. Usage: REVERSE <text>";
+                }
+                return "🔄 Reversed: " + new StringBuilder(argument).reverse().toString();
+                
+            case "UPPERCASE":
+            case "UPPER":
+                if (argument.isEmpty()) {
+                    return "❌ Error: UPPERCASE requires text. Usage: UPPERCASE <text>";
+                }
+                return "🔠 Uppercase: " + argument.toUpperCase();
+                
+            case "LOWERCASE":
+            case "LOWER":
+                if (argument.isEmpty()) {
+                    return "❌ Error: LOWERCASE requires text. Usage: LOWERCASE <text>";
+                }
+                return "🔡 Lowercase: " + argument.toLowerCase();
+                
+            case "COUNT":
+                if (argument.isEmpty()) {
+                    return "❌ Error: COUNT requires text. Usage: COUNT <text>";
+                }
+                int chars = argument.length();
+                int words = argument.trim().isEmpty() ? 0 : argument.trim().split("\\s+").length;
+                return String.format("📊 Count: %d characters, %d words", chars, words);
+                
+            case "MATH":
+                return processMath(argument);
+                
+            case "STATUS":
+                Runtime runtime = Runtime.getRuntime();
+                long totalMemory = runtime.totalMemory() / (1024 * 1024);
+                long freeMemory = runtime.freeMemory() / (1024 * 1024);
+                long usedMemory = totalMemory - freeMemory;
+                return String.format("💻 Status: HEALTHY | Memory: %dMB/%dMB | Port: %d", 
+                                   usedMemory, totalMemory, port);
+                
+            case "INFO":
+            case "HELP":
+                return "ℹ️ UDP Message Server | Commands:\n" +
+                       "  PING/HEALTH - Check if alive\n" +
+                       "  TIME - Get server time\n" +
+                       "  UPTIME - Server uptime\n" +
+                       "  ECHO <text> - Echo back text\n" +
+                       "  REVERSE <text> - Reverse text\n" +
+                       "  UPPERCASE <text> - Convert to uppercase\n" +
+                       "  LOWERCASE <text> - Convert to lowercase\n" +
+                       "  COUNT <text> - Count characters and words\n" +
+                       "  MATH <expression> - Calculate (e.g., 5+3)\n" +
+                       "  STATUS - Server status";
+                
+            default:
+                return "❓ Unknown command: " + request + "\n" +
+                       "Type 'HELP' for available commands";
+        }
+    }
+    
+    /**
+     * Process simple math expressions
+     * @param expression The math expression (e.g., "5+3", "10-2", "6*4", "20/5")
+     * @return The result or error message
+     */
+    private String processMath(String expression) {
+        if (expression.isEmpty()) {
+            return "❌ Error: MATH requires expression. Usage: MATH <number><operator><number>";
+        }
+        
+        try {
+            expression = expression.trim().replaceAll("\\s+", "");
             
-            return String.format(
-                "STATUS:HEALTHY|UPTIME:RUNNING|MEMORY:%dMB/%dMB|TIMESTAMP:%s",
-                usedMemory, totalMemory, timestamp
-            );
-        } else if (request.equalsIgnoreCase("INFO")) {
-            return String.format(
-                "SERVER:UDP-Health-Check|PORT:%d|PROTOCOL:UDP|VERSION:1.0|TIMESTAMP:%s",
-                port, timestamp
-            );
-        } else if (request.startsWith("ECHO:")) {
-            // Echo back whatever comes after "ECHO:"
-            String echoData = request.substring(5);
-            return "ECHO_RESPONSE:" + echoData + "|TIMESTAMP:" + timestamp;
-        } else {
-            // Default response - echo the received data
-            return "RECEIVED:" + request + "|TIMESTAMP:" + timestamp;
+            // Find operator
+            char operator = ' ';
+            int operatorIndex = -1;
+            
+            for (int i = 1; i < expression.length(); i++) {
+                char c = expression.charAt(i);
+                if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%') {
+                    operator = c;
+                    operatorIndex = i;
+                    break;
+                }
+            }
+            
+            if (operatorIndex == -1) {
+                return "❌ Error: No operator found. Use +, -, *, /, or %";
+            }
+            
+            double num1 = Double.parseDouble(expression.substring(0, operatorIndex));
+            double num2 = Double.parseDouble(expression.substring(operatorIndex + 1));
+            double result;
+            
+            switch (operator) {
+                case '+':
+                    result = num1 + num2;
+                    break;
+                case '-':
+                    result = num1 - num2;
+                    break;
+                case '*':
+                    result = num1 * num2;
+                    break;
+                case '/':
+                    if (num2 == 0) {
+                        return "❌ Error: Division by zero";
+                    }
+                    result = num1 / num2;
+                    break;
+                case '%':
+                    result = num1 % num2;
+                    break;
+                default:
+                    return "❌ Error: Invalid operator";
+            }
+            
+            // Format result
+            if (result == (long) result) {
+                return String.format("🧮 Result: %s = %d", expression, (long) result);
+            } else {
+                return String.format("🧮 Result: %s = %.2f", expression, result);
+            }
+            
+        } catch (NumberFormatException e) {
+            return "❌ Error: Invalid number format. Use: MATH <number><operator><number>";
+        } catch (Exception e) {
+            return "❌ Error: Could not calculate. Check expression format.";
         }
     }
 
