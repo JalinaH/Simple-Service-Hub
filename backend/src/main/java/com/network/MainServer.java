@@ -21,16 +21,16 @@ public class MainServer {
     public static void main(String[] args) {
         printBanner();
         
-        // --- TCP Chat Server (Port 5000) ---
+        // --- TCP Chat Server (Port 5004) ---
         // Demonstrates: TCP connections, ExecutorService, Runnable, synchronized
         System.out.println("[MainServer] Starting TCP Chat Server...");
-        ChatServer tcpChatServer = new ChatServer(5000);
+        ChatServer tcpChatServer = new ChatServer(5004);
         
         // Create a new thread for the TCP server and start it [cite: 556, 579-580]
         // This allows the server to run independently without blocking the main thread
         new Thread(tcpChatServer, "TCP-Server-Thread").start();
         
-        System.out.println("[MainServer] ✓ TCP Chat Server initialized on port 5000");
+        System.out.println("[MainServer] ✓ TCP Chat Server initialized on port 5004");
         System.out.println();
 
         // --- NIO File Transfer Server (Port 5001) ---
@@ -61,7 +61,7 @@ public class MainServer {
         System.out.println("[MainServer] 🚀 ALL SERVICES ARE RUNNING!");
         System.out.println();
         System.out.println("[MainServer] Service Overview:");
-        System.out.println("[MainServer]   Port 5000 - TCP Chat Server (blocking, multithreaded)");
+        System.out.println("[MainServer]   Port 5004 - TCP Chat Server (blocking, multithreaded)");
         System.out.println("[MainServer]   Port 5001 - NIO File Server (non-blocking, selector-based)");
         System.out.println("[MainServer]   Port 5002 - UDP Health Server (connectionless, fast)");
         System.out.println();

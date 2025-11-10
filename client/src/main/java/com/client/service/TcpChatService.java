@@ -10,7 +10,7 @@ import java.util.function.Consumer;
 import javafx.application.Platform;
 
 /**
- * TCP Chat Service - Connects to TCP Chat Server (Port 5000)
+ * TCP Chat Service - Connects to TCP Chat Server (Port 5004)
  * Uses Socket, BufferedReader, PrintWriter for communication
  */
 public class TcpChatService {
@@ -21,9 +21,10 @@ public class TcpChatService {
     private Consumer<String> messageCallback;
     private Consumer<String> statusCallback;
     private boolean running = false;
+    private String username; // Store username to prepend to messages
     
     private static final String SERVER_HOST = "localhost";
-    private static final int SERVER_PORT = 5000;
+    private static final int SERVER_PORT = 5004;
     
     /**
      * Connect to TCP Chat Server
@@ -33,6 +34,7 @@ public class TcpChatService {
      * @throws IOException If connection fails
      */
     public void connect(String username, Consumer<String> messageCallback, Consumer<String> statusCallback) throws IOException {
+        this.username = username;
         this.messageCallback = messageCallback;
         this.statusCallback = statusCallback;
         
@@ -41,8 +43,8 @@ public class TcpChatService {
         reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         writer = new PrintWriter(socket.getOutputStream(), true);
         
-        // Send username
-        writer.println(username);
+        // Don't send username yet - just wait for welcome messages
+        // The server will identify us by socket address
         
         running = true;
         updateStatus("Connected to TCP Chat Server");
@@ -78,7 +80,9 @@ public class TcpChatService {
      */
     public void sendMessage(String message) {
         if (writer != null && running) {
-            writer.println(message);
+            // Prepend username to message since server broadcasts everything
+            String formattedMessage = username + ": " + message;
+            writer.println(formattedMessage);
         }
     }
     
