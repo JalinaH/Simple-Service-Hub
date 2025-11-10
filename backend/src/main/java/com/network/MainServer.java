@@ -1,5 +1,6 @@
 package com.network;
 
+import com.network.nio.NioFileServer;
 import com.network.tcp.ChatServer;
 import com.network.udp.UdpHealthServer;
 
@@ -8,11 +9,12 @@ import com.network.udp.UdpHealthServer;
  * Simple Service Hub - A multi-service server application
  * 
  * This application demonstrates:
- * 1. TCP Networking with ServerSocket (Connection-oriented)
+ * 1. TCP Networking with ServerSocket (Connection-oriented, Blocking I/O)
  * 2. Multithreading with ExecutorService (Thread Pool)
  * 3. Thread-safe operations using synchronized blocks
- * 4. UDP Networking with DatagramSocket (Connectionless)
- * 5. Concurrent client handling without blocking
+ * 4. UDP Networking with DatagramSocket (Connectionless, Fast)
+ * 5. NIO with Selector (Non-blocking I/O, High Scalability)
+ * 6. Buffer-oriented I/O with ByteBuffer
  */
 public class MainServer {
 
@@ -28,7 +30,19 @@ public class MainServer {
         // This allows the server to run independently without blocking the main thread
         new Thread(tcpChatServer, "TCP-Server-Thread").start();
         
-        System.out.println("[MainServer] TCP Chat Server initialized on port 5000");
+        System.out.println("[MainServer] ✓ TCP Chat Server initialized on port 5000");
+        System.out.println();
+
+        // --- NIO File Transfer Server (Port 5001) ---
+        // Demonstrates: Non-blocking I/O, Selector, ByteBuffer, ServerSocketChannel
+        System.out.println("[MainServer] Starting NIO File Transfer Server...");
+        NioFileServer nioFileServer = new NioFileServer(5001);
+        
+        // Create a new thread for the NIO server and start it
+        // NIO server uses selector to handle multiple clients in one thread
+        new Thread(nioFileServer, "NIO-Server-Thread").start();
+        
+        System.out.println("[MainServer] ✓ NIO File Server initialized on port 5001");
         System.out.println();
 
         // --- UDP Health Check Server (Port 5002) ---
@@ -40,17 +54,18 @@ public class MainServer {
         // UDP server runs independently and handles packets as they arrive
         new Thread(udpHealthServer, "UDP-Server-Thread").start();
         
-        System.out.println("[MainServer] UDP Health Check Server initialized on port 5002");
+        System.out.println("[MainServer] ✓ UDP Health Check Server initialized on port 5002");
         System.out.println();
-        
-        // --- NIO File Transfer Server (Port 5001) - To be added later ---
-        // new Thread(new NioFileServer(5001)).start();
 
         printSeparator();
-        System.out.println("[MainServer] All services are running!");
-        System.out.println("[MainServer] TCP Chat: port 5000 (connection-oriented)");
-        System.out.println("[MainServer] UDP Health: port 5002 (connectionless)");
-        System.out.println("[MainServer] Press Ctrl+C to stop the server");
+        System.out.println("[MainServer] 🚀 ALL SERVICES ARE RUNNING!");
+        System.out.println();
+        System.out.println("[MainServer] Service Overview:");
+        System.out.println("[MainServer]   Port 5000 - TCP Chat Server (blocking, multithreaded)");
+        System.out.println("[MainServer]   Port 5001 - NIO File Server (non-blocking, selector-based)");
+        System.out.println("[MainServer]   Port 5002 - UDP Health Server (connectionless, fast)");
+        System.out.println();
+        System.out.println("[MainServer] Press Ctrl+C to stop all servers");
         printSeparator();
         System.out.println();
     }
