@@ -85,26 +85,49 @@ public class NioFileService {
         socketChannel.read(readBuffer);
         readBuffer.flip();
         
-        String header = StandardCharsets.UTF_8.decode(readBuffer).toString();
+        // Convert to string to find header end
+        byte[] headerBytes = new byte[readBuffer.remaining()];
+        readBuffer.get(headerBytes);
+        String response = new String(headerBytes, StandardCharsets.UTF_8);
         
-        if (header.startsWith("ERROR")) {
-            throw new IOException(header);
+        if (response.startsWith("ERROR")) {
+            throw new IOException(response.trim());
         }
         
-        // Parse file size from header: "OK <size>\n"
+        // Find the end of the header line (first newline)
+        int headerEnd = response.indexOf('\n');
+        if (headerEnd == -1) {
+            throw new IOException("Invalid response from server - no header delimiter");
+        }
+        
+        String header = response.substring(0, headerEnd).trim();
+        
+        // Parse file size from header: "OK <size>"
         String[] parts = header.split("\\s+");
-        if (parts.length < 2) {
-            throw new IOException("Invalid response from server");
+        if (parts.length < 2 || !parts[0].equals("OK")) {
+            throw new IOException("Invalid response format: " + header);
         }
         
-        long fileSize = Long.parseLong(parts[1].trim());
+        long fileSize;
+        try {
+            fileSize = Long.parseLong(parts[1]);
+        } catch (NumberFormatException e) {
+            throw new IOException("Invalid file size in response: " + parts[1]);
+        }
+        
+        // Calculate where file data starts (after the header newline)
+        int fileDataStart = headerEnd + 1;
+        byte[] initialFileData = response.substring(fileDataStart).getBytes(StandardCharsets.ISO_8859_1);
         
         // Create output file
         File outputFile = new File(saveDirectory, filename);
         try (FileOutputStream fos = new FileOutputStream(outputFile)) {
-            readBuffer.clear();
-            long bytesReceived = 0;
+            // Write initial data that was read with header
+            fos.write(initialFileData);
+            long bytesReceived = initialFileData.length;
             
+            // Read remaining file data
+            readBuffer.clear();
             while (bytesReceived < fileSize) {
                 int bytesRead = socketChannel.read(readBuffer);
                 if (bytesRead == -1) {
@@ -112,7 +135,7 @@ public class NioFileService {
                 }
                 
                 readBuffer.flip();
-                while (readBuffer.hasRemaining()) {
+                while (readBuffer.hasRemaining() && bytesReceived < fileSize) {
                     fos.write(readBuffer.get());
                     bytesReceived++;
                 }
