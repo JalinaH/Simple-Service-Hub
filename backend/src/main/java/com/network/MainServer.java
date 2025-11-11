@@ -6,7 +6,7 @@ import com.network.udp.UdpHealthServer;
 
 /**
  * Main entry point for the Network Programming Assignment 2
- * Simple Service Hub - A multi-service server application
+ * NetHub - A multi-service server application
  * 
  * This application demonstrates:
  * 1. TCP Networking with ServerSocket (Connection-oriented, Blocking I/O)
@@ -72,7 +72,7 @@ public class MainServer {
     
     private static void printBanner() {
         printSeparator();
-        System.out.println("       SIMPLE SERVICE HUB - NETWORK SERVER");
+        System.out.println("       NetHub - NETWORK SERVER");
         printSeparator();
         System.out.println();
     }
