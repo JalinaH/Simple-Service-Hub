@@ -1,0 +1,2 @@
+Welcome to the NIO File Server!
+This is a sample file.

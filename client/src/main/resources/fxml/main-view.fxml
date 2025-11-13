@@ -131,6 +131,13 @@
                     <TextField fx:id="nioFilenameField" promptText="Enter filename to download" HBox.hgrow="ALWAYS"/>
                     <Button fx:id="nioDownloadBtn" text="Download" prefWidth="100" style="-fx-background-color: #e67e22; -fx-text-fill: white;"/>
                 </HBox>
+                
+                <!-- Upload Panel -->
+                <HBox spacing="10" alignment="CENTER_LEFT" style="-fx-background-color: #ecf0f1; -fx-padding: 10; -fx-background-radius: 5;">
+                    <Label text="Upload File:"/>
+                    <Region HBox.hgrow="ALWAYS"/>
+                    <Button fx:id="nioUploadBtn" text="Upload File" prefWidth="120" style="-fx-background-color: #16a085; -fx-text-fill: white;"/>
+                </HBox>
             </VBox>
         </Tab>
         

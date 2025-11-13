@@ -1,6 +1,7 @@
 package com.client.service;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -205,6 +206,133 @@ public class NioFileService {
         }
         
         return outputFile.getAbsolutePath();
+    }
+    
+    /**
+     * Upload file to server
+     * @param filePath Path to file to upload
+     * @return Success message
+     * @throws IOException If upload fails
+     */
+    public String uploadFile(String filePath) throws IOException {
+        if (socketChannel == null || !socketChannel.isConnected()) {
+            throw new IOException("Not connected to server");
+        }
+        
+        File file = new File(filePath);
+        if (!file.exists()) {
+            throw new IOException("File does not exist: " + filePath);
+        }
+        
+        if (!file.isFile()) {
+            throw new IOException("Path is not a file: " + filePath);
+        }
+        
+        String filename = file.getName();
+        long fileSize = file.length();
+        
+        // Send PUT command
+        String command = "PUT " + filename + "\n";
+        ByteBuffer buffer = ByteBuffer.wrap(command.getBytes(StandardCharsets.UTF_8));
+        socketChannel.write(buffer);
+        
+        // Read READY response
+        StringBuilder response = new StringBuilder();
+        ByteBuffer readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        
+        boolean readyReceived = false;
+        while (!readyReceived) {
+            readBuffer.clear();
+            int bytesRead = socketChannel.read(readBuffer);
+            
+            if (bytesRead == -1) {
+                throw new IOException("Server closed connection");
+            }
+            
+            if (bytesRead > 0) {
+                readBuffer.flip();
+                while (readBuffer.hasRemaining()) {
+                    char c = (char) readBuffer.get();
+                    response.append(c);
+                    
+                    // Check for READY message
+                    if (response.toString().contains("READY:")) {
+                        readyReceived = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Send file size
+        String sizeLine = "SIZE: " + fileSize + "\n";
+        buffer = ByteBuffer.wrap(sizeLine.getBytes(StandardCharsets.UTF_8));
+        socketChannel.write(buffer);
+        
+        // Read file and send in chunks
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] fileBuffer = new byte[BUFFER_SIZE];
+            long totalSent = 0;
+            
+            while (totalSent < fileSize) {
+                int bytesRead = fis.read(fileBuffer);
+                if (bytesRead == -1) {
+                    break;
+                }
+                
+                ByteBuffer writeBuffer = ByteBuffer.wrap(fileBuffer, 0, bytesRead);
+                while (writeBuffer.hasRemaining()) {
+                    socketChannel.write(writeBuffer);
+                }
+                
+                totalSent += bytesRead;
+            }
+        }
+        
+        // Read success/error response
+        response.setLength(0);
+        readBuffer = ByteBuffer.allocate(BUFFER_SIZE);
+        
+        boolean responseReceived = false;
+        while (!responseReceived) {
+            readBuffer.clear();
+            int bytesRead = socketChannel.read(readBuffer);
+            
+            if (bytesRead == -1) {
+                throw new IOException("Server closed connection");
+            }
+            
+            if (bytesRead > 0) {
+                readBuffer.flip();
+                while (readBuffer.hasRemaining()) {
+                    char c = (char) readBuffer.get();
+                    response.append(c);
+                    
+                    // Check if we've received the prompt at the end
+                    if (response.length() >= 2 && 
+                        response.substring(response.length() - 2).equals("> ")) {
+                        responseReceived = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Remove the prompt from the response
+        String result = response.toString();
+        if (result.endsWith("> ")) {
+            result = result.substring(0, result.length() - 2);
+        }
+        
+        result = result.trim();
+        
+        if (result.startsWith("SUCCESS:")) {
+            return result;
+        } else if (result.startsWith("ERROR:")) {
+            throw new IOException(result);
+        } else {
+            return result;
+        }
     }
     
     /**

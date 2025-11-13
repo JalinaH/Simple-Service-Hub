@@ -13,6 +13,8 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * NIO File Server - Demonstrates Non-blocking I/O with Selector pattern
@@ -181,6 +183,7 @@ public class NioFileServer implements Runnable {
                            "Commands:\n" +
                            "  LIST          - List available files\n" +
                            "  GET <filename> - Download a file\n" +
+                           "  PUT <filename> - Upload a file\n" +
                            "  INFO          - Server information\n" +
                            "  QUIT          - Disconnect\n" +
                            "> ";
@@ -201,6 +204,13 @@ public class NioFileServer implements Runnable {
     private void handleRead(SelectionKey key) throws IOException {
         // 1. Get the SocketChannel from the key
         SocketChannel clientChannel = (SocketChannel) key.channel();
+
+        // Check if we're in the middle of receiving a file upload
+        UploadState uploadState = (UploadState) key.attachment();
+        if (uploadState != null && uploadState.isUploading) {
+            handleFileUpload(key, uploadState);
+            return;
+        }
 
         // 2. Create a ByteBuffer to hold the incoming data
         // ByteBuffer is the fundamental building block of NIO
@@ -242,7 +252,7 @@ public class NioFileServer implements Runnable {
                 + clientChannel.getRemoteAddress() + ": " + command);
 
             // Process the command
-            processCommand(clientChannel, command);
+            processCommand(clientChannel, key, command);
         }
     }
 
@@ -250,9 +260,10 @@ public class NioFileServer implements Runnable {
      * Process client commands and send appropriate responses
      * 
      * @param clientChannel The client's SocketChannel
+     * @param key The SelectionKey for state management
      * @param command The command received from the client
      */
-    private void processCommand(SocketChannel clientChannel, String command) throws IOException {
+    private void processCommand(SocketChannel clientChannel, SelectionKey key, String command) throws IOException {
         String response;
 
         if (command.equalsIgnoreCase("LIST")) {
@@ -263,6 +274,15 @@ public class NioFileServer implements Runnable {
             String filename = command.substring(4).trim();
             sendFile(clientChannel, filename);
             return;  // sendFile handles the response
+        } else if (command.toUpperCase().startsWith("PUT ")) {
+            // Upload a file - initialize upload state
+            String filename = command.substring(4).trim();
+            if (filename.isEmpty()) {
+                sendMessage(clientChannel, "ERROR: Please specify a filename.\n> ");
+                return;
+            }
+            initializeFileUpload(clientChannel, key, filename);
+            return;  // initializeFileUpload handles the response
         } else if (command.equalsIgnoreCase("INFO")) {
             // Server information
             response = getServerInfo();
@@ -455,6 +475,169 @@ public class NioFileServer implements Runnable {
             }
         } catch (IOException e) {
             System.err.println("[NioFileServer] Failed to create sample file: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Inner class to track file upload state
+     */
+    private static class UploadState {
+        boolean isUploading = false;
+        String filename;
+        long expectedSize = 0;
+        long receivedSize = 0;
+        List<byte[]> dataChunks = new ArrayList<>();
+        boolean sizeReceived = false;
+        StringBuilder sizeBuffer = new StringBuilder(); // For accumulating size line
+    }
+
+    /**
+     * Initialize file upload - wait for file size
+     * 
+     * @param clientChannel The client's SocketChannel
+     * @param key The SelectionKey for state management
+     * @param filename The filename to save
+     */
+    private void initializeFileUpload(SocketChannel clientChannel, SelectionKey key, String filename) throws IOException {
+        UploadState uploadState = new UploadState();
+        uploadState.filename = filename;
+        uploadState.isUploading = true;
+        uploadState.sizeReceived = false;
+        key.attach(uploadState);
+
+        // Send ready message to client
+        sendMessage(clientChannel, "READY: Send file size followed by file data\n");
+    }
+
+    /**
+     * Handle file upload data reception
+     * 
+     * @param key The SelectionKey for the connection
+     * @param uploadState The upload state
+     */
+    private void handleFileUpload(SelectionKey key, UploadState uploadState) throws IOException {
+        SocketChannel clientChannel = (SocketChannel) key.channel();
+        ByteBuffer buffer = ByteBuffer.allocate(BUFFER_SIZE);
+
+        int bytesRead;
+        try {
+            bytesRead = clientChannel.read(buffer);
+        } catch (IOException e) {
+            System.out.println("[NioFileServer] Client disconnected during upload: " 
+                + clientChannel.getRemoteAddress());
+            closeConnection(key);
+            return;
+        }
+
+        if (bytesRead == -1) {
+            System.out.println("[NioFileServer] Client disconnected during upload: " 
+                + clientChannel.getRemoteAddress());
+            closeConnection(key);
+            return;
+        }
+
+        if (bytesRead > 0) {
+            buffer.flip();
+            byte[] data = new byte[buffer.remaining()];
+            buffer.get(data);
+
+            if (!uploadState.sizeReceived) {
+                // First, we need to receive the file size
+                // Format: "SIZE: <number>\n"
+                uploadState.sizeBuffer.append(new String(data, StandardCharsets.UTF_8));
+                String accumulated = uploadState.sizeBuffer.toString();
+
+                // Check if we have the complete size line
+                int newlineIndex = accumulated.indexOf('\n');
+                if (newlineIndex != -1) {
+                    String sizeLine = accumulated.substring(0, newlineIndex);
+                    try {
+                        if (sizeLine.startsWith("SIZE:")) {
+                            String sizeStr = sizeLine.substring(5).trim();
+                            uploadState.expectedSize = Long.parseLong(sizeStr);
+                            uploadState.sizeReceived = true;
+
+                            // Get any file data that came after the newline
+                            int dataStart = newlineIndex + 1;
+                            if (dataStart < accumulated.length()) {
+                                String remainingData = accumulated.substring(dataStart);
+                                byte[] fileData = remainingData.getBytes(StandardCharsets.ISO_8859_1);
+                                uploadState.dataChunks.add(fileData);
+                                uploadState.receivedSize += fileData.length;
+                            }
+
+                            System.out.println("[NioFileServer] Receiving file: " + uploadState.filename 
+                                + " (" + uploadState.expectedSize + " bytes)");
+                        } else {
+                            sendMessage(clientChannel, "ERROR: Expected SIZE: line.\n> ");
+                            key.attach(null);
+                            return;
+                        }
+                    } catch (NumberFormatException e) {
+                        sendMessage(clientChannel, "ERROR: Invalid file size format.\n> ");
+                        key.attach(null);
+                        return;
+                    }
+                }
+                // If no newline yet, wait for more data
+            } else {
+                // Receiving file data
+                uploadState.dataChunks.add(data);
+                uploadState.receivedSize += data.length;
+            }
+
+            // Check if we've received all the data
+            if (uploadState.sizeReceived && uploadState.receivedSize >= uploadState.expectedSize) {
+                // Save the file
+                saveUploadedFile(clientChannel, key, uploadState);
+            }
+        }
+    }
+
+    /**
+     * Save the uploaded file to disk
+     * 
+     * @param clientChannel The client's SocketChannel
+     * @param key The SelectionKey
+     * @param uploadState The upload state containing file data
+     */
+    private void saveUploadedFile(SocketChannel clientChannel, SelectionKey key, UploadState uploadState) throws IOException {
+        try {
+            Path filePath = Paths.get(FILES_DIR, uploadState.filename);
+            
+            // Combine all data chunks into a single byte array
+            int totalSize = (int) Math.min(uploadState.receivedSize, uploadState.expectedSize);
+            byte[] fileData = new byte[totalSize];
+            int offset = 0;
+            
+            for (byte[] chunk : uploadState.dataChunks) {
+                int toCopy = Math.min(chunk.length, totalSize - offset);
+                if (toCopy > 0) {
+                    System.arraycopy(chunk, 0, fileData, offset, toCopy);
+                    offset += toCopy;
+                }
+                if (offset >= totalSize) {
+                    break;
+                }
+            }
+
+            // Write file to disk
+            Files.write(filePath, fileData);
+
+            System.out.println("[NioFileServer] File uploaded successfully: " + uploadState.filename 
+                + " (" + uploadState.expectedSize + " bytes) from " + clientChannel.getRemoteAddress());
+
+            // Clear upload state
+            key.attach(null);
+
+            // Send success message
+            sendMessage(clientChannel, "SUCCESS: File '" + uploadState.filename + "' uploaded successfully (" 
+                + uploadState.expectedSize + " bytes).\n> ");
+
+        } catch (IOException e) {
+            System.err.println("[NioFileServer] Error saving uploaded file: " + e.getMessage());
+            key.attach(null);
+            sendMessage(clientChannel, "ERROR: Failed to save file: " + e.getMessage() + "\n> ");
         }
     }
 

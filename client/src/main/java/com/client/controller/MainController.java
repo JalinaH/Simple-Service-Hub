@@ -17,6 +17,7 @@ import javafx.scene.control.Label;
 import javafx.scene.control.TextArea;
 import javafx.scene.control.TextField;
 import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 
 /**
  * Main Controller for NetHub Client
@@ -50,6 +51,7 @@ public class MainController {
     @FXML private Button nioListBtn;
     @FXML private TextField nioFilenameField;
     @FXML private Button nioDownloadBtn;
+    @FXML private Button nioUploadBtn;
     @FXML private Label nioStatusLabel;
     
     // Link Checker Tab
@@ -226,11 +228,13 @@ public class MainController {
     private void setupNioTab() {
         nioListBtn.setDisable(true);
         nioDownloadBtn.setDisable(true);
+        nioUploadBtn.setDisable(true);
         nioFilenameField.setDisable(true);
         
         nioConnectBtn.setOnAction(e -> handleNioConnect());
         nioListBtn.setOnAction(e -> handleNioList());
         nioDownloadBtn.setOnAction(e -> handleNioDownload());
+        nioUploadBtn.setOnAction(e -> handleNioUpload());
     }
     
     private void handleNioConnect() {
@@ -240,6 +244,7 @@ public class MainController {
             nioConnectBtn.setText("Connect");
             nioListBtn.setDisable(true);
             nioDownloadBtn.setDisable(true);
+            nioUploadBtn.setDisable(true);
             nioFilenameField.setDisable(true);
             nioStatusLabel.setText("Status: Disconnected");
             return;
@@ -250,6 +255,7 @@ public class MainController {
             nioConnectBtn.setText("Disconnect");
             nioListBtn.setDisable(false);
             nioDownloadBtn.setDisable(false);
+            nioUploadBtn.setDisable(false);
             nioFilenameField.setDisable(false);
             nioStatusLabel.setText("Status: Connected to NIO File Server");
             nioFileListArea.appendText("=== Connected to NIO File Server ===\n");
@@ -314,6 +320,37 @@ public class MainController {
                 Platform.runLater(() -> {
                     nioFileListArea.appendText("\n✗ Download failed: " + ex.getMessage() + "\n");
                     nioStatusLabel.setText("Status: Download failed");
+                });
+            }
+        }).start();
+    }
+    
+    private void handleNioUpload() {
+        if (!nioService.isConnected()) {
+            showAlert("Error", "Not connected to server");
+            return;
+        }
+        
+        // Choose file to upload
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Select File to Upload");
+        File file = fileChooser.showOpenDialog(nioUploadBtn.getScene().getWindow());
+        
+        if (file == null) {
+            return;
+        }
+        
+        new Thread(() -> {
+            try {
+                String result = nioService.uploadFile(file.getAbsolutePath());
+                Platform.runLater(() -> {
+                    nioFileListArea.appendText("\n✓ " + result + "\n");
+                    nioStatusLabel.setText("Status: File uploaded successfully");
+                });
+            } catch (IOException ex) {
+                Platform.runLater(() -> {
+                    nioFileListArea.appendText("\n✗ Upload failed: " + ex.getMessage() + "\n");
+                    nioStatusLabel.setText("Status: Upload failed");
                 });
             }
         }).start();
